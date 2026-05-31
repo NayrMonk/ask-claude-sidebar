@@ -5,7 +5,7 @@
 //           PDFs (Chrome viewer), Google Drive previews, and generic web pages.
 
 const { MSG } = globalThis.AskClaude;
-const { cleanText } = globalThis.AskClaude.util;
+const { cleanText, sleep } = globalThis.AskClaude.util;
 
 let lastExtracted = '';
 
@@ -13,12 +13,31 @@ let lastExtracted = '';
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === MSG.EXTRACT_PAGE) {
     const mode = msg.mode || 'current';  // 'current' or 'all'
-    const result = extractPageContent(mode);
-    lastExtracted = result.text;
-    sendResponse(result);
+    // Async so slide extraction can wait for lazily-rendered content before
+    // giving up (see extractPageContentWithRetry). The channel is kept open by
+    // returning true below; the side panel awaits this response.
+    extractPageContentWithRetry(mode).then(result => {
+      lastExtracted = result.text;
+      sendResponse(result);
+    });
   }
-  return true; // keep channel open
+  return true; // keep channel open for the async sendResponse above
 });
+
+// Slides (and some PDFs/Docs) render their content lazily, so a first pass right
+// after the user clicks Read can find nothing even when the page is "loaded".
+// For those types, if we come up empty, poll briefly and re-extract before
+// surfacing a failure. Non-slide / already-populated results return immediately.
+async function extractPageContentWithRetry(mode) {
+  let result = extractPageContent(mode);
+  if (result.type !== 'google_slides' || result.slideCount > 0) return result;
+
+  for (let i = 0; i < 6 && result.slideCount === 0; i++) {
+    await sleep(400);
+    result = extractPageContent(mode);
+  }
+  return result;
+}
 
 // ── Main Extractor Router ──────────────────────────────────────────
 function extractPageContent(mode) {
@@ -79,7 +98,8 @@ function extractSlides(title, url, mode) {
   // All slides mode or fallback
   const text = allSlides.length
     ? allSlides.join('\n\n')
-    : 'Could not extract slide text — the presentation may still be loading.';
+    : 'Could not extract slide text from the page. If you have Google Drive ' +
+      'connected, Claude can still open this presentation from the link above.';
 
   return {
     type: 'google_slides',
@@ -120,16 +140,14 @@ function detectCurrentSlide() {
     if (num > 0) return num;
   }
 
-  // Method 3: Selected thumbnail in the filmstrip
-  const selectedThumb = document.querySelector(
-    '.punch-filmstrip-thumbnail[aria-selected="true"], ' +
-    '.punch-filmstrip-thumbnail.punch-filmstrip-thumbnail-selected'
+  // Method 3: Selected thumbnail in the filmstrip. Index into the SAME list
+  // extractAllSlides() builds, so "This slide" maps to the right entry.
+  const allThumbs = getFilmstripThumbnails();
+  const idx = allThumbs.findIndex(el =>
+    el.getAttribute('aria-selected') === 'true' ||
+    el.classList.contains('punch-filmstrip-thumbnail-selected')
   );
-  if (selectedThumb) {
-    const allThumbs = [...document.querySelectorAll('.punch-filmstrip-thumbnail')];
-    const idx = allThumbs.indexOf(selectedThumb);
-    if (idx >= 0) return idx + 1;
-  }
+  if (idx >= 0) return idx + 1;
 
   // Method 4: Visible slide in the main viewport
   const visibleSlide = document.querySelector('.punch-viewer-svgpage-svgcontainer:not([style*="display: none"])');
@@ -150,44 +168,55 @@ function detectCurrentSlide() {
   return 1; // Default to slide 1
 }
 
+// Left-hand filmstrip thumbnails. In the EDITOR these are inline <svg>s that hold
+// every slide's text (the viewer-only `.punch-viewer-*` containers don't exist
+// there), so they're our primary source for edit-mode extraction. Shared with
+// detectCurrentSlide() so "This slide" mode indexes into the same list.
+const FILMSTRIP_SELECTOR =
+  '.punch-filmstrip-thumbnail, [class*="filmstrip-thumbnail"], ' +
+  '[role="option"][aria-label*="slide" i]';
+
+function getFilmstripThumbnails() {
+  return [...document.querySelectorAll(FILMSTRIP_SELECTOR)];
+}
+
 function extractAllSlides() {
-  const slides = [];
+  // Ordered list of slide-page sources, broadest-fidelity first. We use the
+  // first source that yields any text, so present/publish views and the editor
+  // both flow through one code path.
+  const sources = [
+    // 1. Published viewer / present mode — one container per slide.
+    () => [...document.querySelectorAll(
+      '.punch-viewer-svgpage-svgcontainer, .punch-viewer-content [role="listitem"]'
+    )],
+    // 2. Editor filmstrip thumbnails — inline <svg> text for ALL slides.
+    () => getFilmstripThumbnails(),
+    // 3. Editor main canvas + legacy slide containers — full-fidelity current slide.
+    () => [...document.querySelectorAll(
+      '.punch-canvas-element, svg.sketchy-svg, .punch-slide, .sketchy-slide, ' +
+      '[role="listitem"][aria-label]'
+    )],
+  ];
 
-  // Primary: punch-viewer slide pages (presentation mode / normal view)
-  const slidePages = document.querySelectorAll(
-    '.punch-viewer-svgpage-svgcontainer, ' +
-    '.punch-viewer-content [role="listitem"]'
-  );
-
-  if (slidePages.length > 0) {
-    slidePages.forEach((el, i) => {
+  for (const getEls of sources) {
+    const slides = [];
+    getEls().forEach((el, i) => {
       const texts = extractTextsFromElement(el);
-      if (texts.length) {
-        slides.push(`Slide ${i + 1}:\n${texts.join('\n')}`);
-      }
+      if (texts.length) slides.push(`Slide ${i + 1}:\n${texts.join('\n')}`);
     });
+    if (slides.length) return slides;
   }
 
-  // Fallback 1: sketchy-text-content-container or punch-slide elements
-  if (!slides.length) {
-    const slideEls = document.querySelectorAll('.punch-slide, .sketchy-slide, [role="listitem"][aria-label]');
-    slideEls.forEach((el, i) => {
-      const texts = extractTextsFromElement(el);
-      if (texts.length) {
-        slides.push(`Slide ${i + 1}:\n${texts.join('\n')}`);
-      }
-    });
-  }
-
-  // Fallback 2: Filmstrip thumbnails
-  if (!slides.length) {
-    document.querySelectorAll('.punch-filmstrip-thumbnail').forEach((el, i) => {
-      const label = el.getAttribute('aria-label') || el.innerText || '';
-      if (label.trim()) slides.push(`Slide ${i + 1}: ${label.trim()}`);
-    });
-  }
-
-  return slides;
+  // Last resort: gather every SVG <text>/<tspan> on the page (globally deduped,
+  // in document order). We lose per-slide segmentation but Claude still gets the
+  // deck's text instead of an empty "couldn't extract" stub.
+  const seen = new Set();
+  const allText = [];
+  document.querySelectorAll('text, tspan').forEach(t => {
+    const s = t.textContent.trim();
+    if (s && !seen.has(s)) { seen.add(s); allText.push(s); }
+  });
+  return allText.length ? [allText.join('\n')] : [];
 }
 
 function extractTextsFromElement(el) {
