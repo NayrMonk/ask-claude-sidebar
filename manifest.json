@@ -1,0 +1,67 @@
+{
+  "manifest_version": 3,
+  "name": "Ask Claude",
+  "version": "4.1",
+  "description": "Ask Claude about any page — reads Google Slides, Docs, Sheets, PDFs and regular websites. Connect Google Drive for enhanced file access.",
+
+  "permissions": [
+    "sidePanel",
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess"
+  ],
+
+  "host_permissions": [
+    "https://claude.ai/*",
+    "https://*.anthropic.com/*",
+    "https://docs.google.com/*",
+    "https://drive.google.com/*",
+    "https://sheets.google.com/*",
+    "<all_urls>"
+  ],
+
+  "declarative_net_request": {
+    "rule_resources": [
+      { "id": "claude_frame_rules", "enabled": true, "path": "rules.json" }
+    ]
+  },
+
+  "background": { "service_worker": "src/background/service-worker.js" },
+
+  "side_panel": { "default_path": "src/ui/sidepanel.html" },
+
+  "action": {
+    "default_title": "Ask Claude",
+    "default_icon": {
+      "16":  "icons/icon16.png",
+      "32":  "icons/icon32.png",
+      "48":  "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/shared/protocol.js", "src/shared/util.js", "src/content/page-agent.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://claude.ai/*"],
+      "js": ["src/shared/protocol.js", "src/content/claude-bridge.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+
+  "icons": {
+    "16":  "icons/icon16.png",
+    "32":  "icons/icon32.png",
+    "48":  "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

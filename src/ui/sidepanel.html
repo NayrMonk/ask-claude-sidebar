@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Ask Claude</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #1a1a1a;
+      --bg2:      #222;
+      --bg3:      #2a2a2a;
+      --bg4:      #313131;
+      --border:   #333;
+      --border-l: #3d3d3d;
+      --accent:   #D4572A;
+      --acc-dim:  rgba(212,87,42,.18);
+      --acc-hover:#e0622f;
+      --text:     #e8e6e0;
+      --text2:    #bbb;
+      --dim:      #777;
+      --dim2:     #555;
+      --green:    #3dba6f;
+      --green-dim:rgba(61,186,111,.15);
+      --blue:     #4a90d9;
+      --blue-dim: rgba(74,144,217,.15);
+      --radius:   8px;
+      --radius-lg:12px;
+    }
+
+    html, body {
+      height: 100%; overflow: hidden;
+      background: var(--bg);
+      font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      color: var(--text);
+      display: flex; flex-direction: column;
+    }
+
+    /* ── Top toolbar ── */
+    #toolbar {
+      display: flex; align-items: center;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      gap: 4px;
+      height: 46px;
+      padding: 0 10px;
+      flex-shrink: 0;
+    }
+
+    .logo-wrap { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+    .logo-label {
+      font-weight: 700; font-size: 14px; letter-spacing: -.3px; color: var(--text);
+    }
+    .spacer { flex: 1; }
+
+    /* Icon buttons */
+    .tb-btn {
+      align-items: center; background: none; border: none;
+      border-radius: 6px; color: var(--dim); cursor: pointer;
+      display: flex; justify-content: center; padding: 6px;
+      transition: background .15s, color .15s;
+      position: relative; flex-shrink: 0;
+    }
+    .tb-btn:hover { background: var(--bg4); color: var(--text); }
+    .tb-btn.accent { color: var(--accent); }
+    .tb-btn.accent:hover { background: var(--acc-dim); }
+    .tb-btn.drive-connected { color: var(--green); }
+    .tb-btn.drive-connected:hover { background: var(--green-dim); }
+
+    /* Tooltip */
+    .tb-btn[data-tip]:hover::after {
+      content: attr(data-tip);
+      position: absolute; bottom: -30px; left: 50%; transform: translateX(-50%);
+      background: #111; color: #ccc; border: 1px solid #333; border-radius: 5px;
+      font-size: 11px; padding: 3px 8px; white-space: nowrap;
+      pointer-events: none; z-index: 100;
+    }
+
+    /* Drive status dot */
+    .tb-btn .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      position: absolute; top: 4px; right: 3px;
+      border: 1.5px solid var(--bg2);
+    }
+    .tb-btn .status-dot.connected { background: var(--green); }
+    .tb-btn .status-dot.disconnected { background: var(--dim2); }
+
+    /* ── Google Drive connect card ── */
+    #drive-card {
+      background: linear-gradient(135deg, #1e2a1e 0%, var(--bg3) 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 14px 12px;
+      flex-shrink: 0;
+      animation: slideDown .25s ease-out;
+    }
+    #drive-card.hidden { display: none; }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .drive-card-header {
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 8px;
+    }
+    .drive-card-header svg { flex-shrink: 0; }
+    .drive-card-title {
+      font-weight: 600; font-size: 13px; color: var(--text);
+    }
+    .drive-card-desc {
+      font-size: 11.5px; color: var(--text2); line-height: 1.5;
+      margin-bottom: 10px;
+    }
+    .drive-card-actions { display: flex; gap: 8px; align-items: center; }
+
+    #connect-drive-btn {
+      display: flex; align-items: center; gap: 6px;
+      background: #4285f4; border: none; border-radius: 6px;
+      color: white; font-family: inherit; font-size: 12px; font-weight: 600;
+      padding: 7px 14px; cursor: pointer;
+      transition: background .15s, transform .1s;
+    }
+    #connect-drive-btn:hover { background: #5a95f5; }
+    #connect-drive-btn:active { transform: scale(0.97); }
+    #connect-drive-btn:disabled { opacity: .6; cursor: wait; }
+
+    #dismiss-drive-btn {
+      background: none; border: none; color: var(--dim);
+      font-family: inherit; font-size: 11.5px; cursor: pointer;
+      padding: 4px 8px; border-radius: 4px;
+      transition: color .15s;
+    }
+    #dismiss-drive-btn:hover { color: var(--text2); }
+
+    /* Drive connected strip */
+    #drive-connected-strip {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 14px;
+      background: var(--green-dim);
+      border-bottom: 1px solid rgba(61,186,111,.2);
+      flex-shrink: 0;
+      font-size: 11.5px;
+    }
+    #drive-connected-strip.hidden { display: none; }
+    #drive-connected-strip .drive-email { color: var(--green); font-weight: 500; }
+    #drive-connected-strip .spacer { flex: 1; }
+    #disconnect-drive-btn {
+      background: none; border: none; color: var(--dim);
+      font-family: inherit; font-size: 11px; cursor: pointer;
+      padding: 2px 6px; border-radius: 4px;
+      transition: color .15s;
+    }
+    #disconnect-drive-btn:hover { color: #e55; }
+
+    /* ── Page context strip ── */
+    #ctx-strip {
+      align-items: center; display: flex; gap: 8px;
+      padding: 8px 12px;
+      background: var(--bg3); border-bottom: 1px solid var(--border);
+      flex-shrink: 0; min-height: 38px;
+      animation: slideDown .2s ease-out;
+    }
+    #ctx-strip.hidden { display: none; }
+
+    #ctx-icon { font-size: 16px; flex-shrink: 0; }
+
+    #ctx-title {
+      flex: 1; font-size: 11.5px; color: var(--text2);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #ctx-title strong { color: var(--text); }
+
+    /* Read mode toggle */
+    #read-mode-toggle {
+      display: flex; gap: 0; flex-shrink: 0;
+      border: 1px solid var(--border-l); border-radius: 5px;
+      overflow: hidden;
+    }
+    #read-mode-toggle.hidden { display: none; }
+    .mode-btn {
+      background: var(--bg3); border: none; color: var(--dim);
+      font-family: inherit; font-size: 10.5px; font-weight: 500;
+      padding: 3px 8px; cursor: pointer;
+      transition: background .15s, color .15s;
+      white-space: nowrap;
+    }
+    .mode-btn:not(:last-child) { border-right: 1px solid var(--border-l); }
+    .mode-btn.active { background: var(--acc-dim); color: var(--accent); }
+    .mode-btn:hover:not(.active) { background: var(--bg4); color: var(--text2); }
+
+    #send-ctx-btn {
+      align-items: center; background: var(--accent); border: none;
+      border-radius: 6px; color: white; cursor: pointer;
+      display: flex; font-family: inherit; font-size: 11.5px; font-weight: 600;
+      gap: 5px; padding: 5px 12px; flex-shrink: 0;
+      transition: background .15s, transform .1s;
+    }
+    #send-ctx-btn:hover { background: var(--acc-hover); }
+    #send-ctx-btn:active { transform: scale(0.97); }
+    #send-ctx-btn.sent { background: var(--green); }
+    #send-ctx-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── Loading ── */
+    #loading {
+      align-items: center; display: flex; flex-direction: column;
+      gap: 14px; inset: 0; justify-content: center;
+      position: absolute; background: var(--bg); z-index: 10;
+    }
+    #loading.hidden { display: none; }
+
+    .spinner {
+      width: 30px; height: 30px;
+      border: 3px solid #333; border-top-color: var(--accent);
+      border-radius: 50%; animation: spin .75s linear infinite;
+    }
+    #loading p { color: var(--dim); font-size: 12px; }
+
+    /* ── Frame ── */
+    #frame-wrap { flex: 1; position: relative; overflow: hidden; }
+
+    iframe { border: none; width: 100%; height: 100%; display: block; }
+
+    /* ── Toast ── */
+    #toast {
+      position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%) translateY(10px);
+      background: #111; border: 1px solid #333; border-radius: 8px;
+      color: var(--text); font-size: 12px; padding: 8px 16px;
+      white-space: nowrap; z-index: 999; opacity: 0;
+      transition: opacity .25s, transform .25s;
+      pointer-events: none;
+      box-shadow: 0 4px 20px rgba(0,0,0,.4);
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <div class="logo-wrap">
+      <svg width="22" height="22" viewBox="0 0 48 48" fill="none">
+        <circle cx="24" cy="24" r="24" fill="#D4572A"/>
+        <text x="24" y="32" text-anchor="middle" fill="white"
+              font-size="26" font-family="Georgia,serif" font-weight="bold">C</text>
+      </svg>
+      <span class="logo-label">Ask Claude</span>
+    </div>
+
+    <div class="spacer"></div>
+
+    <!-- Google Drive toggle -->
+    <button class="tb-btn" id="drive-btn" data-tip="Google Drive">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 19.5h20L12 2z" fill="none"/>
+        <path d="M8.5 8.5L2 19.5h7l6.5-11H8.5z" fill="none"/>
+      </svg>
+      <span class="status-dot disconnected" id="drive-status-dot"></span>
+    </button>
+
+    <!-- Read page button -->
+    <button class="tb-btn accent" id="read-page-btn" data-tip="Read this page">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+      </svg>
+    </button>
+
+    <!-- New chat -->
+    <button class="tb-btn" id="new-chat-btn" data-tip="New chat">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+    </button>
+
+    <!-- Reload -->
+    <button class="tb-btn" id="reload-btn" data-tip="Reload">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Google Drive connect card (shown when not connected) -->
+  <div id="drive-card" class="hidden">
+    <div class="drive-card-header">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <path d="M7.71 3.5L1.15 15l3.43 5.95h6.84L7.71 3.5z" fill="#0066DA"/>
+        <path d="M16.29 3.5H7.71l3.71 17.45h6.84l3.43-5.95L16.29 3.5z" fill="#00AC47" opacity=".9"/>
+        <path d="M1.15 15l3.43 5.95h16.84l3.43-5.95H1.15z" fill="#EA4335" opacity=".9"/>
+        <path d="M7.71 3.5l3.71 6.43h10.87L16.29 3.5H7.71z" fill="#00832D" opacity=".8"/>
+        <path d="M1.15 15h10.27l-3.71-6.43L1.15 15z" fill="#2684FC" opacity=".8"/>
+        <path d="M11.42 9.93L7.71 3.5 1.15 15h6.56l3.71-5.07z" fill="#0066DA"/>
+      </svg>
+      <span class="drive-card-title">Google Drive via Claude</span>
+    </div>
+    <p class="drive-card-desc">
+      Ask Claude links the Drive file you're viewing into the chat. To let Claude
+      open the full file (Slides, Docs, Sheets &amp; PDFs), turn on the
+      <strong>Google Drive connector</strong> in Claude's own settings.
+    </p>
+    <div class="drive-card-actions">
+      <button id="connect-drive-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+          <polyline points="10 17 15 12 10 7"/>
+          <line x1="15" y1="12" x2="3" y2="12"/>
+        </svg>
+        Open Claude settings
+      </button>
+      <button id="dismiss-drive-btn">Maybe later</button>
+    </div>
+  </div>
+
+  <!-- Drive connected strip (shown when connected) -->
+  <div id="drive-connected-strip" class="hidden">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+    <span class="drive-email" id="drive-email">Drive connected</span>
+    <div class="spacer"></div>
+    <button id="disconnect-drive-btn">Disconnect</button>
+  </div>
+
+  <!-- Page context strip -->
+  <div id="ctx-strip" class="hidden">
+    <span id="ctx-icon">📄</span>
+    <span id="ctx-title">—</span>
+
+    <!-- Read mode toggle (this slide / all slides) -->
+    <div id="read-mode-toggle" class="hidden">
+      <button class="mode-btn active" data-mode="current">This</button>
+      <button class="mode-btn" data-mode="all">All</button>
+    </div>
+
+    <button id="send-ctx-btn">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <line x1="22" y1="2" x2="11" y2="13"/>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+      Send to Claude
+    </button>
+  </div>
+
+  <!-- Frame area -->
+  <div id="frame-wrap">
+    <div id="loading">
+      <div class="spinner"></div>
+      <p>Opening Claude…</p>
+    </div>
+    <iframe id="claude-frame" src="https://claude.ai/new"
+            allow="clipboard-read; clipboard-write; microphone"></iframe>
+    <div id="toast"></div>
+  </div>
+
+  <!-- Shared globals load first (classic scripts), then the panel controller -->
+  <script src="../shared/protocol.js"></script>
+  <script src="../shared/util.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
