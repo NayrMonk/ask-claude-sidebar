@@ -119,12 +119,3 @@ claude-sidebar/
 - **Tests:** `node tests/unit/<name>.test.js` — no framework/npm; shared modules load in Node because they attach to `globalThis`.
 - Use `MSG`/`FRAME_MSG` constants for all messages; never hardcode message-type strings.
 
-## Version History
-
-| Version | Description |
-|---------|-------------|
-| 1.0 | API key approach — custom chat UI with Anthropic API |
-| 2.0 | Real claude.ai embedded via iframe header stripping |
-| 3.0 | Full page reading — Slides, Docs, Sheets, websites |
-| 4.0 | Google Drive integration, current-page awareness, toolbar fix |
-| 4.1 | Refactor to src/ module layout + globalThis.AskClaude shared layer (no-build) |
